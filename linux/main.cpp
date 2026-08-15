@@ -997,6 +997,7 @@ int main(int argc, char *argv[]) {
 
     // Try to load translation from various locations
     QStringList translationPaths = {
+        QCoreApplication::applicationDirPath(),
         QCoreApplication::applicationDirPath() + "/translations",
         QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/librepods/translations",
         "/usr/share/librepods/translations",
@@ -1006,6 +1007,7 @@ int main(int argc, char *argv[]) {
     for (const QString &path : translationPaths) {
         if (translator->load("librepods_" + locale, path)) {
             app.installTranslator(translator);
+            LOG_INFO("Loaded translation librepods_" << locale << " from " << path);
             break;
         }
     }

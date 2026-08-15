@@ -3,6 +3,7 @@ Version=1.0
 Type=Application
 Name=LibrePods
 Comment=AirPods libreated from Apple's ecosystem
+Comment[ru]=AirPods, освобожденные от экосистемы Apple
 Exec=librepods
 Icon=librepods
 Terminal=false

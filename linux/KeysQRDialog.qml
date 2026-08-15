@@ -5,7 +5,7 @@ import QtQuick.Window 2.15
 
 Window {
     id: root
-    title: "Magic Cloud Keys QR Code"
+    title: qsTr("Magic Cloud Keys QR Code")
     flags: Qt.Dialog
     modality: Qt.WindowModal
 
@@ -50,7 +50,7 @@ Window {
                 Label {
                     anchors.centerIn: parent
                     visible: qrCodeImage.status === Image.Error
-                    text: "Failed to generate QR code"
+                    text: qsTr("Failed to generate QR code")
                     color: systemPalette.text // Dynamic text color
                 }
             }
@@ -59,7 +59,7 @@ Window {
         // Instruction text
         Label {
             Layout.fillWidth: true
-            text: "Scan this QR code to transfer\nthe Magic Cloud Keys to another device"
+            text: qsTr("Scan this QR code to transfer\nthe Magic Cloud Keys to another device")
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
             color: systemPalette.text // Adapts to dark/light mode

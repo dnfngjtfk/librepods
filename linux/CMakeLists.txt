@@ -14,6 +14,9 @@ qt_standard_project_setup()
 # Translation files
 set(TS_FILES
     translations/librepods_tr.ts
+    translations/librepods_it_IT.ts
+    translations/librepods_zh_TW.ts
+    translations/librepods_ru.ts
 )
 
 qt_add_executable(librepods
