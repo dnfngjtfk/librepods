@@ -155,15 +155,6 @@ namespace AirPodsPackets
     }
 
     // Phone Communication Packets
-    namespace Phone
-    {
-        static const QByteArray NOTIFICATION = QByteArray::fromHex("00040001");
-        static const QByteArray CONNECTED = QByteArray::fromHex("00010001");
-        static const QByteArray DISCONNECTED = QByteArray::fromHex("00010000");
-        static const QByteArray STATUS_REQUEST = QByteArray::fromHex("00020003");
-        static const QByteArray DISCONNECT_REQUEST = QByteArray::fromHex("00020000");
-    }
-
     // Adaptive Noise Packets
     namespace AdaptiveNoise
     {

@@ -11,7 +11,6 @@
 #include <QThread>
 #include <QTimer>
 #include <QProcess>
-#include <QRegularExpression>
 #include <QTranslator>
 #include <QLibraryInfo>
 #include <QDir>
@@ -38,13 +37,11 @@ class AirPodsTrayApp : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool airpodsConnected READ areAirpodsConnected NOTIFY airPodsStatusChanged)
     Q_PROPERTY(int earDetectionBehavior READ earDetectionBehavior WRITE setEarDetectionBehavior NOTIFY earDetectionBehaviorChanged)
-    Q_PROPERTY(bool crossDeviceEnabled READ crossDeviceEnabled WRITE setCrossDeviceEnabled NOTIFY crossDeviceEnabledChanged)
     Q_PROPERTY(AutoStartManager *autoStartManager READ autoStartManager CONSTANT)
     Q_PROPERTY(bool notificationsEnabled READ notificationsEnabled WRITE setNotificationsEnabled NOTIFY notificationsEnabledChanged)
     Q_PROPERTY(int retryAttempts READ retryAttempts WRITE setRetryAttempts NOTIFY retryAttemptsChanged)
     Q_PROPERTY(bool hideOnStart READ hideOnStart CONSTANT)
     Q_PROPERTY(DeviceInfo *deviceInfo READ deviceInfo CONSTANT)
-    Q_PROPERTY(QString phoneMacStatus READ phoneMacStatus NOTIFY phoneMacStatusChanged)
     Q_PROPERTY(bool hearingAidEnabled READ hearingAidEnabled WRITE setHearingAidEnabled NOTIFY hearingAidEnabledChanged)
 
 public:
@@ -86,7 +83,6 @@ public:
         connect(m_systemSleepMonitor, &SystemSleepMonitor::systemWakingUp, this, &AirPodsTrayApp::onSystemWakingUp);
 
         // Load settings
-        CrossDevice.isEnabled = loadCrossDeviceEnabled();
         setEarDetectionBehavior(loadEarDetectionSettings());
         setRetryAttempts(loadRetryAttempts());
 
@@ -118,23 +114,19 @@ public:
     }
 
     ~AirPodsTrayApp() {
-        saveCrossDeviceEnabled();
         saveEarDetectionSettings();
 
         delete socket;
-        delete phoneSocket;
     }
 
     bool areAirpodsConnected() const { return socket && socket->isOpen() && socket->state() == QBluetoothSocket::SocketState::ConnectedState; }
     int earDetectionBehavior() const { return mediaController->getEarDetectionBehavior(); }
-    bool crossDeviceEnabled() const { return CrossDevice.isEnabled; }
     AutoStartManager *autoStartManager() const { return m_autoStartManager; }
     bool notificationsEnabled() const { return trayManager->notificationsEnabled(); }
     void setNotificationsEnabled(bool enabled) { trayManager->setNotificationsEnabled(enabled); }
     int retryAttempts() const { return m_retryAttempts; }
     bool hideOnStart() const { return m_hideOnStart; }
     DeviceInfo *deviceInfo() const { return m_deviceInfo; }
-    QString phoneMacStatus() const { return m_phoneMacStatus; }
     bool hearingAidEnabled() const { return m_deviceInfo->hearingAidEnabled(); }
 
 private:
@@ -143,33 +135,12 @@ private:
 
     QQmlApplicationEngine *parent = nullptr;
 
-    struct {
-        bool isAvailable = true;
-        bool isEnabled = true; // Ability to disable the feature
-    } CrossDevice;
 
     void initializeDBus() { }
 
     bool isAirPodsDevice(const QBluetoothDeviceInfo &device)
     {
         return device.serviceUuids().contains(QBluetoothUuid("74ec2172-0bad-4d01-8f77-997b2be0722a"));
-    }
-
-    void notifyAndroidDevice()
-    {
-        if (!CrossDevice.isEnabled) {
-            return;
-        }
-
-        if (phoneSocket && phoneSocket->isOpen())
-        {
-            phoneSocket->write(AirPodsPackets::Phone::NOTIFICATION);
-            LOG_DEBUG("Sent notification packet to Android: " << AirPodsPackets::Phone::NOTIFICATION.toHex());
-        }
-        else
-        {
-            LOG_WARN("Phone socket is not open, cannot send notification packet");
-        }
     }
 
     void disconnectDevice(const QString &devicePath) {
@@ -313,65 +284,6 @@ public slots:
         emit earDetectionBehaviorChanged(behavior);
     }
 
-    void setCrossDeviceEnabled(bool enabled)
-    {
-        if (CrossDevice.isEnabled == enabled)
-        {
-            LOG_INFO("Cross-device feature is already " << (enabled ? "enabled" : "disabled"));
-            return;
-        }
-
-        CrossDevice.isEnabled = enabled;
-        saveCrossDeviceEnabled();
-        connectToPhone();
-        emit crossDeviceEnabledChanged(enabled);
-    }
-
-    void setPhoneMac(const QString &mac)
-    {
-        if (mac.isEmpty()) {
-            LOG_WARN("Empty MAC provided, ignoring");
-            m_phoneMacStatus = QStringLiteral("No MAC provided (ignoring)");
-            emit phoneMacStatusChanged();
-            return;
-        }
-
-        // Basic MAC address validation (accepts formats like AA:BB:CC:DD:EE:FF, AABBCCDDEEFF, AA-BB-CC-DD-EE-FF)
-        QRegularExpression re("^([0-9A-Fa-f]{2}([-:]?)){5}[0-9A-Fa-f]{2}$");
-        if (!re.match(mac).hasMatch()) {
-            LOG_ERROR("Invalid MAC address format: " << mac);
-            m_phoneMacStatus = QStringLiteral("Invalid MAC: ") + mac;
-            emit phoneMacStatusChanged();
-            return;
-        }
-
-        // Set environment variable for the running process
-        qputenv("PHONE_MAC_ADDRESS", mac.toUtf8());
-        LOG_INFO("PHONE_MAC_ADDRESS environment variable set to: " << mac);
-
-        m_phoneMacStatus = QStringLiteral("Updated MAC: ") + mac;
-        emit phoneMacStatusChanged();
-
-        // Update QML context property so UI placeholders reflect the new value
-        if (parent) {
-            parent->rootContext()->setContextProperty("PHONE_MAC_ADDRESS", mac);
-        }
-
-        // If a phone socket exists, restart connection using the new MAC
-        if (phoneSocket && phoneSocket->isOpen()) {
-            phoneSocket->close();
-            phoneSocket->deleteLater();
-            phoneSocket = nullptr;
-        }
-        connectToPhone();
-    }
-
-    void updatePhoneMacStatus(const QString &status)
-    {
-        m_phoneMacStatus = status;
-        emit phoneMacStatusChanged();
-    }
-
     void setHearingAidEnabled(bool enabled)
     {
         LOG_INFO("Setting hearing aid to: " << (enabled ? "enabled" : "disabled"));
@@ -396,9 +308,6 @@ public slots:
             return false;
         }
     }
-
-    bool loadCrossDeviceEnabled() { return m_settings->value("crossdevice/enabled", false).toBool(); }
-    void saveCrossDeviceEnabled() { m_settings->setValue("crossdevice/enabled", CrossDevice.isEnabled); }
 
     int loadEarDetectionSettings() { return m_settings->value("earDetection/setting", MediaController::EarDetectionBehavior::PauseWhenOneRemoved).toInt(); }
     void saveEarDetectionSettings() { m_settings->setValue("earDetection/setting", mediaController->getEarDetectionBehavior()); }
@@ -511,11 +420,6 @@ private slots:
             socket->close();
             socket = nullptr;
         }
-        if (phoneSocket && phoneSocket->isOpen())
-        {
-            phoneSocket->write(AirPodsPackets::Connection::AIRPODS_DISCONNECTED);
-            LOG_DEBUG("AIRPODS_DISCONNECTED packet written: " << AirPodsPackets::Connection::AIRPODS_DISCONNECTED.toHex());
-        }
 
         // Clear the device name and model
         m_deviceInfo->reset();
@@ -622,10 +526,10 @@ private slots:
         auto handleConnection = [this, localSocket]()
         {
             connect(localSocket, &QBluetoothSocket::readyRead, this, [this, localSocket]()
-                    {
-            QByteArray data = localSocket->readAll();
-            QMetaObject::invokeMethod(this, "parseData", Qt::QueuedConnection, Q_ARG(QByteArray, data));
-            QMetaObject::invokeMethod(this, "relayPacketToPhone", Qt::QueuedConnection, Q_ARG(QByteArray, data)); });
+            {
+                QByteArray data = localSocket->readAll();
+                QMetaObject::invokeMethod(this, "parseData", Qt::QueuedConnection, Q_ARG(QByteArray, data));
+            });
             sendHandshake();
         };
 
@@ -655,7 +559,6 @@ private slots:
 
         localSocket->connectToService(device.address(), QBluetoothUuid("74ec2172-0bad-4d01-8f77-997b2be0722a"));
         m_deviceInfo->setBluetoothAddress(device.address().toString());
-        notifyAndroidDevice();
     }
 
     void parseData(const QByteArray &data)
@@ -758,121 +661,6 @@ private slots:
         }
     }
 
-    void connectToPhone() {
-        if (!CrossDevice.isEnabled) {
-            return;
-        }
-
-        if (phoneSocket && phoneSocket->isOpen()) {
-            LOG_INFO("Already connected to the phone");
-            return;
-        }
-        QBluetoothAddress phoneAddress("00:00:00:00:00:00"); // Default address, will be overwritten if PHONE_MAC_ADDRESS is set
-        QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-
-        if (!env.value("PHONE_MAC_ADDRESS").isEmpty())
-        {
-            phoneAddress = QBluetoothAddress(env.value("PHONE_MAC_ADDRESS"));
-        }
-        phoneSocket = new QBluetoothSocket(QBluetoothServiceInfo::L2capProtocol);
-        connect(phoneSocket, &QBluetoothSocket::connected, this, [this]() {
-            LOG_INFO("Connected to phone");
-            if (!lastBatteryStatus.isEmpty()) {
-                phoneSocket->write(lastBatteryStatus);
-                LOG_DEBUG("Sent last battery status to phone: " << lastBatteryStatus.toHex());
-            }
-            if (!lastEarDetectionStatus.isEmpty()) {
-                phoneSocket->write(lastEarDetectionStatus);
-                LOG_DEBUG("Sent last ear detection status to phone: " << lastEarDetectionStatus.toHex());
-            }
-        });
-
-        connect(phoneSocket, QOverload<QBluetoothSocket::SocketError>::of(&QBluetoothSocket::errorOccurred), this, [this](QBluetoothSocket::SocketError error) {
-            LOG_ERROR("Phone socket error: " << error << ", " << phoneSocket->errorString());
-        });
-
-        phoneSocket->connectToService(phoneAddress, QBluetoothUuid("1abbb9a4-10e4-4000-a75c-8953c5471342"));
-    }
-
-    void relayPacketToPhone(const QByteArray &packet)
-    {
-        if (!CrossDevice.isEnabled) {
-            return;
-        }
-        if (phoneSocket && phoneSocket->isOpen())
-        {
-            phoneSocket->write(AirPodsPackets::Phone::NOTIFICATION + packet);
-        }
-        else
-        {
-            connectToPhone();
-            LOG_WARN("Phone socket is not open, cannot relay packet");
-        }
-    }
-
-    void handlePhonePacket(const QByteArray &packet) {
-        if (packet.startsWith(AirPodsPackets::Phone::NOTIFICATION))
-        {
-            QByteArray airpodsPacket = packet.mid(4);
-            if (socket && socket->isOpen()) {
-                socket->write(airpodsPacket);
-                LOG_DEBUG("Relayed packet to AirPods: " << airpodsPacket.toHex());
-            } else {
-                LOG_ERROR("Socket is not open, cannot relay packet to AirPods");
-            }
-        }
-        else if (packet.startsWith(AirPodsPackets::Phone::CONNECTED))
-        {
-            LOG_INFO("AirPods connected");
-            isConnectedLocally = true;
-            CrossDevice.isAvailable = false;
-        }
-        else if (packet.startsWith(AirPodsPackets::Phone::DISCONNECTED))
-        {
-            LOG_INFO("AirPods disconnected");
-            isConnectedLocally = false;
-            CrossDevice.isAvailable = true;
-        }
-        else if (packet.startsWith(AirPodsPackets::Phone::STATUS_REQUEST))
-        {
-            LOG_INFO("Connection status request received");
-            QByteArray response = (socket && socket->isOpen()) ? AirPodsPackets::Phone::CONNECTED
-                                                               : AirPodsPackets::Phone::DISCONNECTED;
-            phoneSocket->write(response);
-            LOG_DEBUG("Sent connection status response: " << response.toHex());
-        }
-        else if (packet.startsWith(AirPodsPackets::Phone::DISCONNECT_REQUEST))
-        {
-            LOG_INFO("Disconnect request received");
-            if (socket && socket->isOpen()) {
-                socket->close();
-                LOG_INFO("Disconnected from AirPods");
-                QProcess process;
-                process.start("bluetoothctl", QStringList() << "disconnect" << m_deviceInfo->bluetoothAddress());
-                process.waitForFinished();
-                QString output = process.readAllStandardOutput().trimmed();
-                LOG_INFO("Bluetoothctl output: " << output);
-                isConnectedLocally = false;
-                CrossDevice.isAvailable = true;
-            }
-        }
-        else
-        {
-            if (socket && socket->isOpen()) {
-                socket->write(packet);
-                LOG_DEBUG("Relayed packet to AirPods: " << packet.toHex());
-            } else {
-                LOG_ERROR("Socket is not open, cannot relay packet to AirPods");
-            }
-        }
-    }
-
-    void onPhoneDataReceived() {
-        QByteArray data = phoneSocket->readAll();
-        LOG_DEBUG("Data received from phone: " << data.toHex());
-        QMetaObject::invokeMethod(this, "handlePhonePacket", Qt::QueuedConnection, Q_ARG(QByteArray, data));
-    }
-
     void bleDeviceFound(const BleInfo &device)
     {
         if (BLEUtils::isValidIrkRpa(m_deviceInfo->magicAccIRK(), device.address)) {
@@ -887,28 +675,8 @@ public:
     void handleMediaStateChange(MediaController::MediaState state) {
         if (state == MediaController::MediaState::Playing) {
             LOG_INFO("Media started playing, sending disconnect request to Android and taking over audio");
-            sendDisconnectRequestToAndroid();
             connectToAirPods(true);
         }
-    }
-
-    void sendDisconnectRequestToAndroid()
-    {
-        if (!CrossDevice.isEnabled) return;
-
-        if (phoneSocket && phoneSocket->isOpen())
-        {
-            phoneSocket->write(AirPodsPackets::Phone::DISCONNECT_REQUEST);
-            LOG_DEBUG("Sent disconnect request to Android: " << AirPodsPackets::Phone::DISCONNECT_REQUEST.toHex());
-        }
-        else
-        {
-            LOG_WARN("Phone socket is not open, cannot send disconnect request");
-        }
-    }
-
-    bool isPhoneConnected() {
-        return phoneSocket && phoneSocket->isOpen();
     }
 
     void connectToAirPods(bool force) {
@@ -939,7 +707,6 @@ public:
     }
 
     void initializeBluetooth() {
-        connectToPhone();
 
         m_deviceInfo->loadFromSettings(*m_settings);
         if (!areAirpodsConnected()) {
@@ -962,16 +729,13 @@ signals:
     void primaryChanged();
     void airPodsStatusChanged();
     void earDetectionBehaviorChanged(int behavior);
-    void crossDeviceEnabledChanged(bool enabled);
     void notificationsEnabledChanged(bool enabled);
     void retryAttemptsChanged(int attempts);
     void oneBudANCModeChanged(bool enabled);
-    void phoneMacStatusChanged();
     void hearingAidEnabledChanged(bool enabled);
 
 private:
     QBluetoothSocket *socket = nullptr;
-    QBluetoothSocket *phoneSocket = nullptr;
     QByteArray lastBatteryStatus;
     QByteArray lastEarDetectionStatus;
     MediaController* mediaController;
@@ -984,7 +748,6 @@ private:
     DeviceInfo *m_deviceInfo;
     BleManager *m_bleManager;
     SystemSleepMonitor *m_systemSleepMonitor = nullptr;
-    QString m_phoneMacStatus;
 };
 
 int main(int argc, char *argv[]) {
@@ -1049,14 +812,6 @@ int main(int argc, char *argv[]) {
     AirPodsTrayApp *trayApp = new AirPodsTrayApp(debugMode, hideOnStart, &engine);
     engine.rootContext()->setContextProperty("airPodsTrayApp", trayApp);
 
-    // Expose PHONE_MAC_ADDRESS environment variable to QML for placeholder in settings
-    {
-        QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-        QString phoneMacEnv = env.value("PHONE_MAC_ADDRESS", "");
-        engine.rootContext()->setContextProperty("PHONE_MAC_ADDRESS", phoneMacEnv);
-        // Initialize the visible status in the GUI
-        trayApp->updatePhoneMacStatus(phoneMacEnv.isEmpty() ? QStringLiteral("No phone MAC set") : phoneMacEnv);
-    }
 
     trayApp->loadMainModule();
 

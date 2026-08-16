@@ -222,14 +222,6 @@ ApplicationWindow {
                     }
 
                     Switch {
-                        text: qsTr("Cross-Device Connectivity with Android")
-                        checked: airPodsTrayApp.crossDeviceEnabled
-                        onCheckedChanged: {
-                            airPodsTrayApp.setCrossDeviceEnabled(checked)
-                        }
-                    }
-
-                    Switch {
                         text: qsTr("Auto-Start on Login")
                         checked: airPodsTrayApp.autoStartManager.autoStartEnabled
                         onCheckedChanged: airPodsTrayApp.autoStartManager.autoStartEnabled = checked
@@ -284,22 +276,17 @@ ApplicationWindow {
                         }
                     }
 
-                    Row {
-                        spacing: 10
-                        visible: airPodsTrayApp.airpodsConnected
 
-                        TextField {
-                            id: newPhoneMacField
-                            placeholderText: (PHONE_MAC_ADDRESS !== "" ? PHONE_MAC_ADDRESS : "00:00:00:00:00:00")
-                            maximumLength: 32
-                        }
-
-                        Button {
-                            text: qsTr("Change Phone MAC")
-                            onClicked: airPodsTrayApp.setPhoneMac(newPhoneMacField.text)
-                        }
+                    Button {
+                        text: qsTr("Show Magic Cloud Keys QR")
+                        onClicked: keysQrDialog.show()
                     }
 
+                    KeysQRDialog {
+                        id: keysQrDialog
+                        encKey: airPodsTrayApp.deviceInfo.magicAccEncKey
+                        irk: airPodsTrayApp.deviceInfo.magicAccIRK
+                    }
                 }
             }
 
