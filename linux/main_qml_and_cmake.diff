@@ -1,0 +1,66 @@
+diff --git a/linux/CMakeLists.txt b/linux/CMakeLists.txt
+index 9ccb91f..36222b2 100644
+--- a/linux/CMakeLists.txt
++++ b/linux/CMakeLists.txt
+@@ -49,6 +49,8 @@ qt_add_qml_module(librepods
+     QML_FILES
+         Main.qml
+         BatteryIndicator.qml
++        BatteryRing.qml
++        PodsBatteryRow.qml
+         SegmentedControl.qml
+         PodColumn.qml
+         Icon.qml
+diff --git a/linux/Main.qml b/linux/Main.qml
+index 175520e..e099366 100644
+--- a/linux/Main.qml
++++ b/linux/Main.qml
+@@ -93,32 +93,8 @@ ApplicationWindow {
+                     anchors.horizontalCenter: parent.horizontalCenter
+                     spacing: 8
+ 
+-                    PodColumn {
+-                        visible: airPodsTrayApp.deviceInfo.battery.leftPodAvailable
+-                        inEar: airPodsTrayApp.deviceInfo.leftPodInEar
+-                        iconSource: "qrc:/icons/assets/" + airPodsTrayApp.deviceInfo.leftPodIcon
+-                        batteryLevel: airPodsTrayApp.deviceInfo.battery.leftPodLevel
+-                        isCharging: airPodsTrayApp.deviceInfo.battery.leftPodCharging
+-                        indicator: "L"
+-                    }
+-
+-                    PodColumn {
+-                        visible: airPodsTrayApp.deviceInfo.battery.rightPodAvailable
+-                        inEar: airPodsTrayApp.deviceInfo.rightPodInEar
+-                        iconSource: "qrc:/icons/assets/" + airPodsTrayApp.deviceInfo.rightPodIcon
+-                        batteryLevel: airPodsTrayApp.deviceInfo.battery.rightPodLevel
+-                        isCharging: airPodsTrayApp.deviceInfo.battery.rightPodCharging
+-                        indicator: "R"
+-                    }
+-
+-                    PodColumn {
+-                        visible: airPodsTrayApp.deviceInfo.battery.caseAvailable
+-                        inEar: true
+-                        iconSource: "qrc:/icons/assets/" + airPodsTrayApp.deviceInfo.caseIcon
+-                        batteryLevel: airPodsTrayApp.deviceInfo.battery.caseLevel
+-                        isCharging: airPodsTrayApp.deviceInfo.battery.caseCharging
+-                    }
+-
++                    // AirPods Max (headset) keeps the old linear indicator -
++                    // it's a single unit, no L/R merge logic applies to it.
+                     PodColumn {
+                         visible: airPodsTrayApp.deviceInfo.battery.headsetAvailable
+                         inEar: true
+@@ -126,6 +102,13 @@ ApplicationWindow {
+                         batteryLevel: airPodsTrayApp.deviceInfo.battery.headsetLevel
+                         isCharging: airPodsTrayApp.deviceInfo.battery.headsetCharging
+                     }
++
++                    // Regular AirPods: circular rings, L/R merge into one
++                    // "Pods" ring when close in charge, Case always shown
++                    // (just dims when unavailable).
++                    PodsBatteryRow {
++                        visible: !airPodsTrayApp.deviceInfo.battery.headsetAvailable
++                    }
+                 }
+ 
+                 SegmentedControl {

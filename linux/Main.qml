@@ -93,38 +93,21 @@ ApplicationWindow {
                     anchors.horizontalCenter: parent.horizontalCenter
                     spacing: 8
 
-                    PodColumn {
-                        visible: airPodsTrayApp.deviceInfo.battery.leftPodAvailable
-                        inEar: airPodsTrayApp.deviceInfo.leftPodInEar
-                        iconSource: "qrc:/icons/assets/" + airPodsTrayApp.deviceInfo.leftPodIcon
-                        batteryLevel: airPodsTrayApp.deviceInfo.battery.leftPodLevel
-                        isCharging: airPodsTrayApp.deviceInfo.battery.leftPodCharging
-                        indicator: "L"
-                    }
-
-                    PodColumn {
-                        visible: airPodsTrayApp.deviceInfo.battery.rightPodAvailable
-                        inEar: airPodsTrayApp.deviceInfo.rightPodInEar
-                        iconSource: "qrc:/icons/assets/" + airPodsTrayApp.deviceInfo.rightPodIcon
-                        batteryLevel: airPodsTrayApp.deviceInfo.battery.rightPodLevel
-                        isCharging: airPodsTrayApp.deviceInfo.battery.rightPodCharging
-                        indicator: "R"
-                    }
-
-                    PodColumn {
-                        visible: airPodsTrayApp.deviceInfo.battery.caseAvailable
-                        inEar: true
-                        iconSource: "qrc:/icons/assets/" + airPodsTrayApp.deviceInfo.caseIcon
-                        batteryLevel: airPodsTrayApp.deviceInfo.battery.caseLevel
-                        isCharging: airPodsTrayApp.deviceInfo.battery.caseCharging
-                    }
-
+                    // AirPods Max (headset) keeps the old linear indicator -
+                    // it's a single unit, no L/R merge logic applies to it.
                     PodColumn {
                         visible: airPodsTrayApp.deviceInfo.battery.headsetAvailable
                         inEar: true
                         iconSource: "qrc:/icons/assets/" + airPodsTrayApp.deviceInfo.leftPodIcon
                         batteryLevel: airPodsTrayApp.deviceInfo.battery.headsetLevel
                         isCharging: airPodsTrayApp.deviceInfo.battery.headsetCharging
+                    }
+
+                    // Regular AirPods: circular rings, L/R merge into one
+                    // "Pods" ring when close in charge, Case always shown
+                    // (just dims when unavailable).
+                    PodsBatteryRow {
+                        visible: !airPodsTrayApp.deviceInfo.battery.headsetAvailable
                     }
                 }
 

@@ -49,6 +49,8 @@ qt_add_qml_module(librepods
     QML_FILES
         Main.qml
         BatteryIndicator.qml
+        BatteryRing.qml
+        PodsBatteryRow.qml
         SegmentedControl.qml
         PodColumn.qml
         Icon.qml
