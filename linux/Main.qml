@@ -246,46 +246,21 @@ ApplicationWindow {
                         }
                     }
 
-                    Row {
-                        spacing: 5
-                        Label {
-                            text: qsTr("Bluetooth Retry Attempts:")
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                        SpinBox {
-                            from: 1
-                            to: 10
-                            value: airPodsTrayApp.retryAttempts
-                            onValueChanged: airPodsTrayApp.retryAttempts = value
-                        }
-                    }
+
+
 
                     Row {
                         spacing: 10
                         visible: airPodsTrayApp.airpodsConnected
-
                         TextField {
                             id: newNameField
                             placeholderText: airPodsTrayApp.deviceInfo.deviceName
                             maximumLength: 32
                         }
-
                         Button {
                             text: qsTr("Rename")
                             onClicked: airPodsTrayApp.renameAirPods(newNameField.text)
                         }
-                    }
-
-
-                    Button {
-                        text: qsTr("Show Magic Cloud Keys QR")
-                        onClicked: keysQrDialog.show()
-                    }
-
-                    KeysQRDialog {
-                        id: keysQrDialog
-                        encKey: airPodsTrayApp.deviceInfo.magicAccEncKey
-                        irk: airPodsTrayApp.deviceInfo.magicAccIRK
                     }
                 }
             }
