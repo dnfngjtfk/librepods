@@ -1,28 +1,53 @@
 import QtQuick 2.15
+import QtQuick.Controls 2.15
 
-// A single circular battery indicator:
-//  - green progress ring for the charge level
-//  - lightning bolt in the middle while charging
-//  - percentage text in the middle while not charging
-//  - greys itself out (ring + text) when `available` is false, but stays
-//    laid out (doesn't collapse/disappear) so the slot never jumps around
+// A single circular battery indicator, styled like the AirPods popup on iPhone.
+//
+// Two independent concepts, don't confuse them:
+//  - `hasData`: have we EVER received a real battery reading for this slot
+//    in this app session? If false, the ring is just an empty grey track
+//    and NOTHING is shown below it (no "--", no badge) - we simply don't
+//    know yet. Once true, it stays true for the rest of the session even
+//    if the pod briefly drops out, so the number never disappears.
+//  - `bright`: is this slot currently "in use" (in the ear / charging)?
+//    Purely a dim/bright toggle for an already-known percentage - the
+//    number and ring stay visible, they just go grey instead of colored.
 Item {
     id: root
 
-    property real size: 90
-    property real percentage: 0        // 0-100
+    property real size: 56
+    property real percentage: 0        // 0-100, meaningless while !hasData
     property bool charging: false
-    property bool available: true      // false -> dimmed placeholder state
-    property string label: ""          // optional caption under the ring, e.g. "L" / "Case"
+    property bool hasData: true        // false -> never had a reading this session
+    property bool bright: true         // false -> known, but dimmed (not in ear / not charging)
+    property string indicator: ""      // "L" / "R" badge shown next to the %, "" = none
 
-    property color activeColor: "#34C759"  // Apple-style green
-    property color trackColor: "#3A3A3C"   // ring track when available
-    property color dimColor: "#2C2C2E"     // ring track/fill when unavailable
+    SystemPalette { id: palette }
+    readonly property bool darkMode: palette.window.hslLightness < palette.windowText.hslLightness
+
+    readonly property bool lowBattery: percentage <= 25
+    readonly property color activeColor: lowBattery
+                                          ? (darkMode ? "#FC4244" : "#FE373C")
+                                          : (darkMode ? "#2ED158" : "#35C759")
+    readonly property color dimArcColor: darkMode ? "#8E8E93" : "#AEAEB2"
+    readonly property color trackColor: darkMode ? "#3A3A3C" : "#E3E3E8"
+    readonly property color dimColor: darkMode ? "#2C2C2E" : "#D1D1D6"
+    readonly property color ringForeground: !hasData ? "transparent" : (bright ? activeColor : dimArcColor)
 
     implicitWidth: size
-    implicitHeight: size + (label.length > 0 ? 22 : 0)
+    implicitHeight: size + 22
 
-    // --- progress ring ---
+    property real animatedPercentage: percentage
+    Behavior on animatedPercentage {
+        NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+    }
+
+    FontLoader {
+        id: sfSymbols
+        source: "qrc:/icons/assets/fonts/SF-Symbols-6.ttf"
+    }
+
+    // --- progress ring (thin track always visible so the slot never "vanishes") ---
     Canvas {
         id: ring
         width: root.size
@@ -36,24 +61,24 @@ Item {
 
             var cx = width / 2
             var cy = height / 2
-            var r = Math.min(width, height) / 2 - 6
+            var r = Math.min(width, height) / 2 - 5
             var startAngle = -Math.PI / 2
 
-            // background track
+            // background track - dimmer when we don't even know the level yet
             ctx.beginPath()
-            ctx.lineWidth = 6
-            ctx.strokeStyle = root.available ? root.trackColor : root.dimColor
+            ctx.lineWidth = 4
+            ctx.lineCap = "round"
+            ctx.strokeStyle = root.hasData ? root.trackColor : root.dimColor
             ctx.arc(cx, cy, r, 0, Math.PI * 2)
             ctx.stroke()
 
-            // foreground progress (only when we actually have data)
-            if (root.available) {
-                var pct = Math.max(0, Math.min(100, root.percentage)) / 100
+            if (root.hasData) {
+                var pct = Math.max(0, Math.min(100, root.animatedPercentage)) / 100
                 var endAngle = startAngle + pct * Math.PI * 2
                 ctx.beginPath()
-                ctx.lineWidth = 6
+                ctx.lineWidth = 4
                 ctx.lineCap = "round"
-                ctx.strokeStyle = root.activeColor
+                ctx.strokeStyle = root.ringForeground
                 ctx.arc(cx, cy, r, startAngle, endAngle, false)
                 ctx.stroke()
             }
@@ -62,52 +87,59 @@ Item {
         Component.onCompleted: requestPaint()
     }
 
-    onPercentageChanged: ring.requestPaint()
-    onAvailableChanged: ring.requestPaint()
+    onAnimatedPercentageChanged: ring.requestPaint()
+    onHasDataChanged: ring.requestPaint()
+    onRingForegroundChanged: ring.requestPaint()
 
-    // --- lightning bolt (shown instead of the % text while charging) ---
-    Canvas {
+    // --- lightning bolt while charging ---
+    Text {
         id: bolt
-        width: root.size * 0.28
-        height: root.size * 0.32
         anchors.centerIn: ring
-        visible: root.available && root.charging
+        text: "\uDBC0\uDEE6"
+        font.family: sfSymbols.name
+        font.pixelSize: root.size * 0.32
+        color: root.ringForeground
+        visible: root.hasData && root.charging
+        scale: root.hasData && root.charging ? 1 : 0.4
+        opacity: root.hasData && root.charging ? 1 : 0
 
-        onPaint: {
-            var ctx = getContext("2d")
-            ctx.reset()
-            ctx.fillStyle = root.activeColor
-            ctx.beginPath()
-            ctx.moveTo(width * 0.55, 0)
-            ctx.lineTo(width * 0.12, height * 0.58)
-            ctx.lineTo(width * 0.42, height * 0.58)
-            ctx.lineTo(width * 0.30, height)
-            ctx.lineTo(width * 0.88, height * 0.38)
-            ctx.lineTo(width * 0.55, height * 0.38)
-            ctx.closePath()
-            ctx.fill()
-        }
-        Component.onCompleted: requestPaint()
+        Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutBack } }
+        Behavior on opacity { NumberAnimation { duration: 200 } }
     }
 
-    // --- percentage text ---
-    Text {
-        anchors.centerIn: ring
-        visible: !bolt.visible
-        text: root.available ? Math.round(root.percentage) + "%" : "--"
-        color: root.available ? "white" : "#8E8E93"
-        font.pixelSize: root.size * 0.2
-        font.bold: true
-    }
-
-    // --- caption ---
-    Text {
+    // --- caption: [optional L/R badge]  percentage - only exists once we
+    // actually know something; otherwise this whole row stays hidden but
+    // the layout height doesn't change, so nothing jumps around ---
+    Row {
         anchors.top: ring.bottom
-        anchors.topMargin: 4
+        anchors.topMargin: 6
         anchors.horizontalCenter: parent.horizontalCenter
-        visible: root.label.length > 0
-        text: root.label
-        color: root.available ? "#AEAEB2" : "#636366"
-        font.pixelSize: 13
+        spacing: 4
+        visible: root.hasData
+
+        Rectangle {
+            anchors.verticalCenter: parent.verticalCenter
+            visible: root.indicator.length > 0
+            width: 15
+            height: 15
+            radius: width / 2
+            color: root.bright ? palette.text : "#8E8E93"
+
+            Text {
+                anchors.centerIn: parent
+                text: root.indicator
+                color: palette.window
+                font.pixelSize: 9
+                font.bold: true
+            }
+        }
+
+        Text {
+            anchors.verticalCenter: parent.verticalCenter
+            text: Math.round(root.percentage) + "%"
+            color: root.bright ? palette.text : "#8E8E93"
+            font.pixelSize: 15
+            font.bold: false
+        }
     }
 }
