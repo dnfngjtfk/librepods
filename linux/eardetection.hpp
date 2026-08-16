@@ -57,6 +57,8 @@ public:
 
     bool isPrimaryInEar() const { return primaryStatus == EarDetectionStatus::InEar; }
     bool isSecondaryInEar() const { return secondaryStatus == EarDetectionStatus::InEar; }
+    bool isPrimaryInCase() const { return primaryStatus == EarDetectionStatus::InCase; }
+    bool isSecondaryInCase() const { return secondaryStatus == EarDetectionStatus::InCase; }
     bool oneOrMorePodsInCase() const { return primaryStatus == EarDetectionStatus::InCase || secondaryStatus == EarDetectionStatus::InCase; }
     bool oneOrMorePodsInEar() const { return isPrimaryInEar() || isSecondaryInEar(); }
 

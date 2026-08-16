@@ -28,6 +28,8 @@ class DeviceInfo : public QObject
     Q_PROPERTY(QString caseIcon READ caseIcon NOTIFY caseIconChanged)
     Q_PROPERTY(bool leftPodInEar READ isLeftPodInEar NOTIFY primaryChanged)
     Q_PROPERTY(bool rightPodInEar READ isRightPodInEar NOTIFY primaryChanged)
+    Q_PROPERTY(bool leftPodInCase READ isLeftPodInCase NOTIFY primaryChanged)
+    Q_PROPERTY(bool rightPodInCase READ isRightPodInCase NOTIFY primaryChanged)
     Q_PROPERTY(QString bluetoothAddress READ bluetoothAddress WRITE setBluetoothAddress NOTIFY bluetoothAddressChanged)
     Q_PROPERTY(QString magicAccIRK READ magicAccIRKHex CONSTANT)
     Q_PROPERTY(QString magicAccEncKey READ magicAccEncKeyHex CONSTANT)
@@ -163,6 +165,16 @@ public:
     {
         if (getBattery()->getPrimaryPod() == Battery::Component::Right) return getEarDetection()->isPrimaryInEar();
         else return getEarDetection()->isSecondaryInEar();
+    }
+    bool isLeftPodInCase() const
+    {
+        if (getBattery()->getPrimaryPod() == Battery::Component::Left) return getEarDetection()->isPrimaryInCase();
+        else return getEarDetection()->isSecondaryInCase();
+    }
+    bool isRightPodInCase() const
+    {
+        if (getBattery()->getPrimaryPod() == Battery::Component::Right) return getEarDetection()->isPrimaryInCase();
+        else return getEarDetection()->isSecondaryInCase();
     }
 
     bool adaptiveModeActive() const { return noiseControlMode() == NoiseControlMode::Adaptive; }

@@ -42,11 +42,6 @@ Item {
         NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
     }
 
-    FontLoader {
-        id: sfSymbols
-        source: "qrc:/icons/assets/fonts/SF-Symbols-6.ttf"
-    }
-
     // --- progress ring (thin track always visible so the slot never "vanishes") ---
     Canvas {
         id: ring
@@ -89,22 +84,51 @@ Item {
 
     onAnimatedPercentageChanged: ring.requestPaint()
     onHasDataChanged: ring.requestPaint()
-    onRingForegroundChanged: ring.requestPaint()
+    onRingForegroundChanged: { ring.requestPaint(); boltCanvas.requestPaint() }
 
     // --- lightning bolt while charging ---
-    Text {
+    // Drawn by hand on a Canvas instead of using the SF Symbols font glyph:
+    // that glyph is a macOS-only private-use codepoint and doesn't reliably
+    // render on Linux/Qt, so "charging" could become true (case png swaps
+    // correctly) while the bolt inside the ring stayed invisible.
+    Item {
         id: bolt
         anchors.centerIn: ring
-        text: "\uDBC0\uDEE6"
-        font.family: sfSymbols.name
-        font.pixelSize: root.size * 0.32
-        color: root.ringForeground
+        width: root.size * 0.34
+        height: root.size * 0.34
         visible: root.hasData && root.charging
         scale: root.hasData && root.charging ? 1 : 0.4
         opacity: root.hasData && root.charging ? 1 : 0
 
         Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutBack } }
         Behavior on opacity { NumberAnimation { duration: 200 } }
+
+        Canvas {
+            id: boltCanvas
+            anchors.fill: parent
+
+            onPaint: {
+                var ctx = getContext("2d")
+                ctx.reset()
+                ctx.fillStyle = root.ringForeground
+                var w = width
+                var h = height
+                ctx.beginPath()
+                ctx.moveTo(w * 0.62, h * 0.02)
+                ctx.lineTo(w * 0.26, h * 0.58)
+                ctx.lineTo(w * 0.47, h * 0.58)
+                ctx.lineTo(w * 0.36, h * 1.0)
+                ctx.lineTo(w * 0.76, h * 0.40)
+                ctx.lineTo(w * 0.53, h * 0.40)
+                ctx.closePath()
+                ctx.fill()
+            }
+
+            Component.onCompleted: requestPaint()
+        }
+
+        onWidthChanged: boltCanvas.requestPaint()
+        onHeightChanged: boltCanvas.requestPaint()
     }
 
     // --- caption: [optional L/R badge]  percentage - only exists once we

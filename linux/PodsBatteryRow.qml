@@ -2,11 +2,18 @@ import QtQuick 2.15
 
 // Left / Right / Case, always laid out, never removed.
 //
-// - Left & Right MERGE into one shared ring when both are currently
-//   reporting battery AND their levels are within 5% of each other.
-//   This only reacts to the actual battery % (which changes slowly), NOT
-//   to ear-detection - that's what used to make the layout jump around
-//   every time one pod was taken out of the ear.
+// - Left & Right MERGE into one shared ring by default. They SPLIT apart
+//   only when:
+//     1. their charge levels diverge by 5% or more, or
+//     2. exactly one of them is sitting in the case and the other isn't
+//        (both in the case, or both out, still counts as "the same"
+//        and stays merged).
+//   Ear status alone (one in the ear, one not) never splits or dims them -
+//   the ring only greys out when the pod (or case) is actually
+//   disconnected over Bluetooth / not reporting battery.
+// - When BOTH pods are fully disconnected (no AirPods connected at all),
+//   they default back to the merged view too, so you get one grey
+//   placeholder slot instead of two.
 // - Each slot remembers the last real percentage it ever saw this session
 //   (`...HasData` / `...CachedLevel`), so briefly losing the "in ear"/
 //   "available" signal never blanks the number - it just dims it.
@@ -45,59 +52,89 @@ Row {
     onCaseAvailChanged: syncCase()
     Component.onCompleted: { syncLeft(); syncRight(); syncCase() }
 
-    // "bright" = currently in the ear or charging (dims otherwise, but the
-    // number stays visible as long as hasData is true)
-    readonly property bool leftBright: leftAvail && (deviceInfo.leftPodInEar || battery.leftPodCharging)
-    readonly property bool rightBright: rightAvail && (deviceInfo.rightPodInEar || battery.rightPodCharging)
+    // Two different things dim things here - don't mix them up:
+    //  - "InEar" bright -> dims the pod ICON ONLY, when that pod isn't
+    //    currently worn (out of the ear, or sitting in the case). This is
+    //    the behavior that's already right, untouched.
+    //  - "Connected" bright -> colors the RING (arc + %/L/R text) only.
+    //    It stays colored as long as the pod/case is actually reachable
+    //    over Bluetooth and reporting a level; it does NOT grey out just
+    //    because the pod is out of the ear - only full disconnect does.
+    readonly property bool leftEarBright: leftAvail && deviceInfo.leftPodInEar
+    readonly property bool rightEarBright: rightAvail && deviceInfo.rightPodInEar
+    readonly property bool leftConnected: leftAvail
+    readonly property bool rightConnected: rightAvail
     readonly property bool caseBright: caseAvail
 
-    readonly property bool canMerge: leftAvail && rightAvail && Math.abs(leftLevel - rightLevel) < 5
+    // The rules for splitting Left/Right apart - see the note at the top
+    // of the file. Both-disconnected is checked first since in that case
+    // leftAvail/rightAvail are both false and we still want the merged
+    // (single placeholder) view, not two empty separate slots.
+    readonly property bool bothDisconnected: !leftAvail && !rightAvail
+    readonly property bool leftInCase: deviceInfo.leftPodInCase
+    readonly property bool rightInCase: deviceInfo.rightPodInCase
+    readonly property bool oneInCaseOnly: leftInCase !== rightInCase
+    readonly property bool canMerge: bothDisconnected || (leftAvail && rightAvail && !oneInCaseOnly && Math.abs(leftLevel - rightLevel) < 5)
     readonly property real mergedLevel: (leftCachedLevel + rightCachedLevel) / 2
     readonly property bool mergedCharging: battery.leftPodCharging || battery.rightPodCharging
-    readonly property bool mergedBright: leftBright || rightBright
+    readonly property bool mergedConnected: leftConnected || rightConnected
 
     // earbud pngs aren't visually centered in their own canvas (the model
-    // itself sits ~13% off-center in each asset), compensate so it looks
+    // itself sits off-center in each asset), compensate so it looks
     // centered under the ring
     readonly property real podIconSize: 64
-    readonly property real podCenterCorrection: podIconSize * 0.13
+    readonly property real podCenterCorrection: podIconSize * 0.07
+    readonly property real ringSize: 48
+
+    // Shared height for the icon area of every slot (pods + case), sized to
+    // the biggest icon (the case, now 2x the pod icons). Every slot centers
+    // its icon(s) inside a box of this same height, so - no matter how tall
+    // the icon actually is - the ring underneath always lands on the exact
+    // same line as the case's ring.
+    readonly property real iconAreaHeight: podIconSize * 2
 
     // --- Merged Left+Right ---
     Column {
         visible: root.canMerge
         spacing: 8
 
-        Row {
+        Item {
             anchors.horizontalCenter: parent.horizontalCenter
-            spacing: root.podIconSize / 5
+            width: childrenRect.width
+            height: root.iconAreaHeight
 
-            Image {
-                source: "qrc:/icons/assets/" + deviceInfo.leftPodIcon
-                width: root.podIconSize
-                height: root.podIconSize
-                fillMode: Image.PreserveAspectFit
-                mipmap: true
-                opacity: root.mergedBright ? 1.0 : 0.35
-                Behavior on opacity { NumberAnimation { duration: 200 } }
-            }
-            Image {
-                source: "qrc:/icons/assets/" + deviceInfo.rightPodIcon
-                width: root.podIconSize
-                height: root.podIconSize
-                fillMode: Image.PreserveAspectFit
-                mipmap: true
-                opacity: root.mergedBright ? 1.0 : 0.35
-                Behavior on opacity { NumberAnimation { duration: 200 } }
+            Row {
+                anchors.centerIn: parent
+                spacing: root.podIconSize / 5
+
+                Image {
+                    source: "qrc:/icons/assets/" + deviceInfo.leftPodIcon
+                    width: root.podIconSize
+                    height: root.podIconSize
+                    fillMode: Image.PreserveAspectFit
+                    mipmap: true
+                    opacity: root.leftEarBright ? 1.0 : 0.35
+                    Behavior on opacity { NumberAnimation { duration: 200 } }
+                }
+                Image {
+                    source: "qrc:/icons/assets/" + deviceInfo.rightPodIcon
+                    width: root.podIconSize
+                    height: root.podIconSize
+                    fillMode: Image.PreserveAspectFit
+                    mipmap: true
+                    opacity: root.rightEarBright ? 1.0 : 0.35
+                    Behavior on opacity { NumberAnimation { duration: 200 } }
+                }
             }
         }
 
         BatteryRing {
             anchors.horizontalCenter: parent.horizontalCenter
-            size: 56
+            size: root.ringSize
             percentage: root.mergedLevel
             charging: root.mergedCharging
             hasData: root.leftHasData && root.rightHasData
-            bright: root.mergedBright
+            bright: root.mergedConnected
         }
     }
 
@@ -106,25 +143,31 @@ Row {
         visible: !root.canMerge
         spacing: 8
 
-        Image {
+        Item {
             anchors.horizontalCenter: parent.horizontalCenter
-            anchors.horizontalCenterOffset: -root.podCenterCorrection
-            source: "qrc:/icons/assets/" + deviceInfo.leftPodIcon
             width: root.podIconSize
-            height: root.podIconSize
-            fillMode: Image.PreserveAspectFit
-            mipmap: true
-            opacity: root.leftBright ? 1.0 : 0.35
-            Behavior on opacity { NumberAnimation { duration: 200 } }
+            height: root.iconAreaHeight
+
+            Image {
+                anchors.centerIn: parent
+                anchors.horizontalCenterOffset: -root.podCenterCorrection
+                source: "qrc:/icons/assets/" + deviceInfo.leftPodIcon
+                width: root.podIconSize
+                height: root.podIconSize
+                fillMode: Image.PreserveAspectFit
+                mipmap: true
+                opacity: root.leftEarBright ? 1.0 : 0.35
+                Behavior on opacity { NumberAnimation { duration: 200 } }
+            }
         }
 
         BatteryRing {
             anchors.horizontalCenter: parent.horizontalCenter
-            size: 56
+            size: root.ringSize
             percentage: root.leftCachedLevel
             charging: root.battery.leftPodCharging
             hasData: root.leftHasData
-            bright: root.leftBright
+            bright: root.leftConnected
             indicator: "L"
         }
     }
@@ -134,25 +177,31 @@ Row {
         visible: !root.canMerge
         spacing: 8
 
-        Image {
+        Item {
             anchors.horizontalCenter: parent.horizontalCenter
-            anchors.horizontalCenterOffset: root.podCenterCorrection
-            source: "qrc:/icons/assets/" + deviceInfo.rightPodIcon
             width: root.podIconSize
-            height: root.podIconSize
-            fillMode: Image.PreserveAspectFit
-            mipmap: true
-            opacity: root.rightBright ? 1.0 : 0.35
-            Behavior on opacity { NumberAnimation { duration: 200 } }
+            height: root.iconAreaHeight
+
+            Image {
+                anchors.centerIn: parent
+                anchors.horizontalCenterOffset: root.podCenterCorrection
+                source: "qrc:/icons/assets/" + deviceInfo.rightPodIcon
+                width: root.podIconSize
+                height: root.podIconSize
+                fillMode: Image.PreserveAspectFit
+                mipmap: true
+                opacity: root.rightEarBright ? 1.0 : 0.35
+                Behavior on opacity { NumberAnimation { duration: 200 } }
+            }
         }
 
         BatteryRing {
             anchors.horizontalCenter: parent.horizontalCenter
-            size: 56
+            size: root.ringSize
             percentage: root.rightCachedLevel
             charging: root.battery.rightPodCharging
             hasData: root.rightHasData
-            bright: root.rightBright
+            bright: root.rightConnected
             indicator: "R"
         }
     }
@@ -161,20 +210,26 @@ Row {
     Column {
         spacing: 8
 
-        Image {
+        Item {
             anchors.horizontalCenter: parent.horizontalCenter
-            source: "qrc:/icons/assets/" + deviceInfo.caseIcon
-            width: root.podIconSize
-            height: root.podIconSize
-            fillMode: Image.PreserveAspectFit
-            mipmap: true
-            opacity: root.caseBright ? 1.0 : 0.35
-            Behavior on opacity { NumberAnimation { duration: 200 } }
+            width: root.podIconSize * 2
+            height: root.iconAreaHeight
+
+            Image {
+                anchors.centerIn: parent
+                source: "qrc:/icons/assets/" + deviceInfo.caseIcon
+                width: root.podIconSize * 2
+                height: root.podIconSize * 2
+                fillMode: Image.PreserveAspectFit
+                mipmap: true
+                opacity: root.caseBright ? 1.0 : 0.35
+                Behavior on opacity { NumberAnimation { duration: 200 } }
+            }
         }
 
         BatteryRing {
             anchors.horizontalCenter: parent.horizontalCenter
-            size: 56
+            size: root.ringSize
             percentage: root.caseCachedLevel
             charging: root.battery.caseCharging
             hasData: root.caseHasData
