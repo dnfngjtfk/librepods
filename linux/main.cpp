@@ -28,7 +28,6 @@
 #include "deviceinfo.hpp"
 #include "ble/blemanager.h"
 #include "ble/bleutils.h"
-#include "QRCodeImageProvider.hpp"
 #include "systemsleepmonitor.hpp"
 
 using namespace AirpodsTrayApp::Enums;
@@ -1059,7 +1058,6 @@ int main(int argc, char *argv[]) {
         trayApp->updatePhoneMacStatus(phoneMacEnv.isEmpty() ? QStringLiteral("No phone MAC set") : phoneMacEnv);
     }
 
-    engine.addImageProvider("qrcode", new QRCodeImageProvider());
     trayApp->loadMainModule();
 
     QLocalServer server;

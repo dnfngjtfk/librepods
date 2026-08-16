@@ -40,9 +40,6 @@ qt_add_executable(librepods
     ble/bleutils.h
     ble/blemanager.cpp
     ble/blemanager.h
-    thirdparty/QR-Code-generator/qrcodegen.cpp
-    thirdparty/QR-Code-generator/qrcodegen.hpp
-    QRCodeImageProvider.hpp
     eardetection.hpp
     media/playerstatuswatcher.cpp
     media/playerstatuswatcher.h
@@ -58,7 +55,6 @@ qt_add_qml_module(librepods
         SegmentedControl.qml
         PodColumn.qml
         Icon.qml
-        KeysQRDialog.qml
 )
 
 # Add the resource file

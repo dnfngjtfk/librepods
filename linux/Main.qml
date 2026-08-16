@@ -300,17 +300,6 @@ ApplicationWindow {
                         }
                     }
 
-
-                    Button {
-                        text: qsTr("Show Magic Cloud Keys QR")
-                        onClicked: keysQrDialog.show()
-                    }
-
-                    KeysQRDialog {
-                        id: keysQrDialog
-                        encKey: airPodsTrayApp.deviceInfo.magicAccEncKey
-                        irk: airPodsTrayApp.deviceInfo.magicAccIRK
-                    }
                 }
             }
 
